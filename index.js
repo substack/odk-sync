@@ -4,6 +4,7 @@ var tojson = require('xform-to-json')
 var hyperkv = require('hyperkv')
 var hypercore = require('hypercore')
 var sub = require('subleveldown')
+var once = require('once')
 
 var KV = 'kv', CORE = 'core'
 
@@ -28,18 +29,21 @@ Sync.prototype.importDevice = function (dir, cb) {
     if (err) return cb(err)
     Object.keys(files).forEach(function (name) {
       pending++
-      self._insertRecord(name, files[name], dir, done)
+      self._insertRecord(name, files[name], dir, function (err) {
+        if (err) errors.push(err)
+        done()
+      })
     })
     done()
   })
-  function done (err) {
-    if (err) errors.push(err)
+  function done () {
     if (--pending !== 0) return cb(errors)
   }
 }
 
 Sync.prototype._insertRecord = function (name, files, dir, cb) {
   var self = this
+  cb = once(cb || noop)
   var xmlFiles = files.filter(function (file) {
     return /\.xml$/i.test(file)
   })
@@ -62,16 +66,36 @@ Sync.prototype._insertRecord = function (name, files, dir, cb) {
           cb(null) // already has the record
         } else {
           // doesn't already have the record
-          self.kv.put(id, {
-            files: notXmlFiles.map(function (file) {
-              return path.relative(dir, file)
-            }),
-            info: info
-          }, cb)
+          addFiles(id, info)
         }
       })
     })
   })
+  function addFiles (id, info) {
+    var pending = 1 + notXmlFiles.length
+    var hashes = {}
+    notXmlFiles.forEach(function (file) {
+      var ws = self.core.createWriteStream()
+      var r = fs.createReadStream(file)
+      var rel = path.relative(dir, file)
+      ws.once('finish', function () {
+        hashes[rel] = ws.id.toString('hex')
+        if (--pending === 0) put()
+      })
+      r.once('error', cb)
+      ws.once('error', cb)
+      r.pipe(ws)
+    })
+    if (--pending === 0) put()
+
+    function put () {
+      var files = {}
+      self.kv.put(id, { files: hashes, info: info }, function (err, node) {
+        if (err) cb(err)
+        else cb(null, id, node)
+      })
+    }
+  }
 }
 
 function getInstanceFiles (dir, cb) {
@@ -97,3 +121,5 @@ function getInstanceFiles (dir, cb) {
     if (--pending === 0) cb(null, results)
   })
 }
+
+function noop () {}
