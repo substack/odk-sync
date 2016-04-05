@@ -1,23 +1,36 @@
 #!/usr/bin/env node
 var hyperlog = require('hyperlog')
-var minimist = require('minimist')
 var level = require('level')
 var Sync = require('./')
+var homedir = require('os').homedir()
+var path = require('path')
+var mkdirp = require('mkdirp')
 
-var argv = minimist(process.argv.slice(2))
+var minimist = require('minimist')
+var argv = minimist(process.argv.slice(2), {
+  default: { configdir: path.join(homedir, '.config/odk-sync') },
+  alias: { c: 'configdir' }
+})
 
-if (argv._[0] === 'device') {
+var dbdir = path.join(argv.configdir, 'db')
+mkdirp.sync(dbdir)
+
+var logdb = level(path.join(dbdir, 'log'))
+var idb = level(path.join(dbdir, 'index'))
+
+var sync = Sync({
+  db: idb,
+  log: hyperlog(logdb, { valueEncoding: 'json' })
+})
+
+if (argv._[0] === 'import') {
   var dir = argv._[1]
-  Sync.fromDevicePath(dir, function (err, instances) {
-    if (err) return error(err)
-    console.log(instances)
+  sync.importDevice(dir, function (errors, instances) {
+    if (errors.length) error(errors[0])
   })
-  //var log = hyperlog(level(argv._[0]), { valueEncoding: 'json' })
 } else {
   //...
 }
-
-//var log1 = hyperlog(level(argv._[1]), { valueEncoding: 'json' })
 
 function error (err) {
   console.error(err)
