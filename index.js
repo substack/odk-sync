@@ -5,6 +5,8 @@ var hyperkv = require('hyperkv')
 var hypercore = require('hypercore')
 var sub = require('subleveldown')
 var once = require('once')
+var multiplex = require('multiplex')
+var onend = require('end-of-stream')
 
 var KV = 'kv', CORE = 'core'
 
@@ -19,6 +21,39 @@ function Sync (opts) {
     log: this.log
   })
   this.core = hypercore(opts.coredb || sub(this.db, CORE))
+}
+
+Sync.prototype.replicate = function (cb) {
+  cb = once(cb || noop)
+  var plex = multiplex()
+  var core = plex.createSharedStream('core')
+  var log = plex.createSharedStream('log')
+  var pending = 2
+  plex.once('error', cb)
+  core.once('error', cb)
+  log.once('error', cb)
+  onend(core, function () {
+    console.log('END CORE')
+    done()
+  })
+  onend(log, function () {
+    console.log('END LOG')
+    done()
+  })
+
+  var rlog = this.log.replicate()
+  rlog.once('error', cb)
+  rlog.pipe(log).pipe(rlog)
+
+  var rcore = this.core.createReplicationStream()
+  rcore.once('error', cb)
+  rcore.pipe(core).pipe(rcore)
+
+  return plex
+
+  function done () {
+    if (--pending === 0) cb(null)
+  }
 }
 
 Sync.prototype.importDevice = function (dir, cb) {
