@@ -7,24 +7,37 @@ var sub = require('subleveldown')
 var once = require('once')
 var multiplex = require('multiplex')
 var onend = require('end-of-stream')
+var through = require('through2')
+var inherits = require('inherits')
+var EventEmitter = require('events').EventEmitter
 
 var KV = 'kv', CORE = 'core'
 
 module.exports = Sync
+inherits(Sync, EventEmitter)
 
 function Sync (opts) {
-  if (!(this instanceof Sync)) return new Sync(opts)
-  this.db = opts.db
-  this.log = opts.log
-  this.kv = hyperkv({
-    db: opts.kvdb || sub(this.db, KV),
-    log: this.log
+  var self = this
+  if (!(self instanceof Sync)) return new Sync(opts)
+  EventEmitter.call(self)
+  self.db = opts.db
+  self.log = opts.log
+  self.kv = hyperkv({
+    db: opts.kvdb || sub(self.db, KV),
+    log: self.log
   })
-  this.core = hypercore(opts.coredb || sub(this.db, CORE))
+  self.core = hypercore(opts.coredb || sub(self.db, CORE))
 }
 
-Sync.prototype.replicate = function (cb) {
+Sync.prototype.replicate = function (opts, cb) {
+  var self = this
+  if (typeof opts === 'function') {
+    cb = opts
+    opts = {}
+  }
+  if (!opts) opts = {}
   cb = once(cb || noop)
+
   var plex = multiplex()
   var core = plex.createSharedStream('core')
   var log = plex.createSharedStream('log')
@@ -32,28 +45,20 @@ Sync.prototype.replicate = function (cb) {
   plex.once('error', cb)
   core.once('error', cb)
   log.once('error', cb)
-  onend(core, function () {
-    console.log('END CORE')
-    done()
-  })
-  onend(log, function () {
-    console.log('END LOG')
-    done()
-  })
+  onend(core, done)
+  onend(log, done)
 
   var rlog = this.log.replicate()
   rlog.once('error', cb)
   rlog.pipe(log).pipe(rlog)
 
-  var rcore = this.core.createReplicationStream()
+  var rcore = this.core.replicate({ live: false })
   rcore.once('error', cb)
   rcore.pipe(core).pipe(rcore)
 
   return plex
 
-  function done () {
-    if (--pending === 0) cb(null)
-  }
+  function done () { if (--pending === 0) cb(null) }
 }
 
 Sync.prototype.importDevice = function (dir, cb) {
@@ -110,16 +115,23 @@ Sync.prototype._insertRecord = function (name, files, dir, cb) {
     var pending = 1 + notXmlFiles.length
     var hashes = {}
     notXmlFiles.forEach(function (file) {
-      var ws = self.core.createWriteStream()
+      var feed = self.core.createFeed({ live: false })
+
       var r = fs.createReadStream(file)
       var rel = path.relative(dir, file)
-      ws.once('finish', function () {
-        hashes[rel] = ws.id.toString('hex')
-        if (--pending === 0) put()
-      })
       r.once('error', cb)
-      ws.once('error', cb)
-      r.pipe(ws)
+      r.pipe(through(write, end)).once('error', cb)
+
+      function write (buf, enc, next) {
+        feed.append(buf, next)
+      }
+      function end (next) {
+        feed.finalize(function (err) {
+          if (err) return next(err)
+          hashes[rel] = feed.key.toString('hex')
+          if (--pending === 0) put()
+        })
+      }
     })
     if (--pending === 0) put()
 
