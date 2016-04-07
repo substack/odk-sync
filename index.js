@@ -2,7 +2,7 @@ var fs = require('fs')
 var path = require('path')
 var tojson = require('xform-to-json')
 var hyperkv = require('hyperkv')
-var hypercore = require('hypercore')
+var forkdb = require('forkdb')
 var sub = require('subleveldown')
 var once = require('once')
 var multiplex = require('multiplex')
@@ -11,7 +11,7 @@ var through = require('through2')
 var inherits = require('inherits')
 var EventEmitter = require('events').EventEmitter
 
-var KV = 'kv', CORE = 'core'
+var KV = 'kv', FDB = 'fdb'
 
 module.exports = Sync
 inherits(Sync, EventEmitter)
@@ -26,7 +26,7 @@ function Sync (opts) {
     db: opts.kvdb || sub(self.db, KV),
     log: self.log
   })
-  self.core = hypercore(opts.coredb || sub(self.db, CORE))
+  self.forkdb = forkdb(sub(self.db, FDB))
 }
 
 Sync.prototype.replicate = function (opts, cb) {
@@ -39,26 +39,28 @@ Sync.prototype.replicate = function (opts, cb) {
   cb = once(cb || noop)
 
   var plex = multiplex()
-  var core = plex.createSharedStream('core')
+  var fdb = plex.createSharedStream('forkdb')
   var log = plex.createSharedStream('log')
   var pending = 2
   plex.once('error', cb)
-  core.once('error', cb)
+  fdb.once('error', cb)
   log.once('error', cb)
-  onend(core, done)
+  onend(fdb, done)
   onend(log, done)
 
   var rlog = this.log.replicate()
   rlog.once('error', cb)
   rlog.pipe(log).pipe(rlog)
 
-  var rcore = this.core.replicate({ live: false })
-  rcore.once('error', cb)
-  rcore.pipe(core).pipe(rcore)
+  var rf = this.forkdb.replicate({ live: false })
+  rf.once('error', cb)
+  rf.pipe(fdb).pipe(rf)
 
   return plex
 
-  function done () { if (--pending === 0) cb(null) }
+  function done () {
+    if (--pending === 0) cb(null)
+  }
 }
 
 Sync.prototype.importDevice = function (dir, cb) {
@@ -113,31 +115,28 @@ Sync.prototype._insertRecord = function (name, files, dir, cb) {
   })
   function addFiles (id, info) {
     var pending = 1 + notXmlFiles.length
-    var hashes = {}
+    var keys = []
     notXmlFiles.forEach(function (file) {
-      var feed = self.core.createFeed({ live: false })
+      var key = id + '-' + file
+      keys.push(key)
+      var ws = self.forkdb.createWriteStream({ key: key }, onwrite)
 
       var r = fs.createReadStream(file)
       var rel = path.relative(dir, file)
       r.once('error', cb)
-      r.pipe(through(write, end)).once('error', cb)
+      ws.once('error', cb)
+      r.pipe(ws)
 
-      function write (buf, enc, next) {
-        feed.append(buf, next)
-      }
-      function end (next) {
-        feed.finalize(function (err) {
-          if (err) return next(err)
-          hashes[rel] = feed.key.toString('hex')
-          if (--pending === 0) put()
-        })
+      function onwrite (err, dkey) {
+        if (err) return cb(err)
+        if (--pending === 0) put()
       }
     })
     if (--pending === 0) put()
 
     function put () {
       var files = {}
-      self.kv.put(id, { files: hashes, info: info }, function (err, node) {
+      self.kv.put(id, { files: keys, info: info }, function (err, node) {
         if (err) cb(err)
         else cb(null, id, node)
       })
