@@ -68,7 +68,7 @@ Sync.prototype.importDevice = function (dir, cb) {
   var pending = 1
   var errors = []
   getInstanceFiles(dir, function (err, files) {
-    if (err) return cb(err)
+    if (err) return cb([err])
     Object.keys(files).forEach(function (name) {
       pending++
       self._insertRecord(name, files[name], dir, function (err) {

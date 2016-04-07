@@ -3,6 +3,8 @@
     "start": "electron app.js --disable-http-cache"
   },
   "dependencies": {
+    "drag-and-drop-files": "0.0.1",
+    "filereader-stream": "^1.0.0",
     "yo-yo": "^1.1.1"
   }
 }
