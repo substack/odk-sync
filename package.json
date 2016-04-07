@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "start": "electron app.js --disable-http-cache"
+  },
+  "dependencies": {
+    "yo-yo": "^1.1.1"
+  }
+}
