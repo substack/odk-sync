@@ -117,12 +117,12 @@ Sync.prototype._insertRecord = function (name, files, dir, cb) {
     var pending = 1 + notXmlFiles.length
     var keys = []
     notXmlFiles.forEach(function (file) {
-      var key = id + '-' + file
+      var rel = path.relative(dir, file)
+      var key = id + '-' + rel
       keys.push(key)
       var ws = self.forkdb.createWriteStream({ key: key }, onwrite)
 
       var r = fs.createReadStream(file)
-      var rel = path.relative(dir, file)
       r.once('error', cb)
       ws.once('error', cb)
       r.pipe(ws)

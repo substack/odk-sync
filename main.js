@@ -18,14 +18,12 @@ var sync = Sync({
     { valueEncoding: 'json' })
 })
 
-function readObs () {
-  sync.kv.createReadStream()
-    .on('data', addRow)
-    .on('end', function () {
-      if (!state.observations) state.observations = []
-      update()
-    })
-}
+sync.kv.createReadStream({ live: true })
+  .on('data', addRow)
+  .on('end', function () {
+    if (!state.observations) state.observations = []
+    update()
+  })
 
 function addRow (row) {
   if (!state.observations) state.observations = []
@@ -44,13 +42,10 @@ var state = {
 update(state)
 
 var dragDrop = require('drag-and-drop-files')
-var freader = require('filereader-stream')
 dragDrop(window, function (files) {
   files.forEach(function (file) {
     sync.importDevice(file.path, function (errors) {
       if (errors.length) return setErrors(errors)
-      state.observations = null
-      readObs()
     })
   })
 })
