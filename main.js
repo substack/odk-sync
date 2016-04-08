@@ -68,54 +68,19 @@ ipc.on('select-sync-dir', function (ev, dir) {
 })
 
 function render (state) {
-  var observations = (state.observations || []).map(function (obs) {
-    var startTime = new Date(obs.info.start.split('.')[0])
-    var loc = obs.info.group_location.location
-    return html`<table class="info">
-      <tr>
-        <th>form</th>
-        <td>${obs.info.meta.formId}
-          /${String(obs.info.meta.version)}</td>
-      </tr>
-      <tr>
-        <th>time</th>
+  var observations = html`<table class="info">
+    <tr>
+      <th>form</th>
+      <th>date</th>
+    </tr>
+    ${state.observations.map(function (obs) {
+      var startTime = new Date(obs.info.start.split('.')[0])
+      return html`<tr>
+        <td>${obs.info.meta.formId} v${obs.info.meta.version}</td>
         <td>${strftime('%F %T', startTime)}</td>
-      </tr>
-      <tr>
-        <th>lon</th>
-        <td>${loc.longitude}</td>
-      </tr>
-      <tr>
-        <th>lat</th>
-        <td>${loc.latitude}</td>
-      </tr>
-      <tr>
-        <th>altitude</th>
-        <td>${loc.altitude}</td>
-      </tr>
-      <tr>
-        <th>precision</th>
-        <td>${loc.precision}</td>
-      </tr>
-      <tr>
-        <th>exact location</th>
-        <td>${obs.info.exact_location}</td>
-      </tr>
-      <tr>
-        <th>category/type</th>
-        <td>${obs.info.territory_category}
-          / ${obs.info.territory_type}</td>
-      </tr>
-      <tr>
-        <th>placename</th>
-        <td>${obs.info.placename}</td>
-      </tr>
-      <tr>
-        <th>people</th>
-        <td>${obs.info.people}</td>
-      </tr>
-    </table>`
-  })
+      </tr>`
+    })}
+  </table>`
   return html`<div>
     <div class="errors">${state.errors.map(function (err) {
       return html`<div class="error">
@@ -137,9 +102,9 @@ function render (state) {
         </td>
       </tr>
     </table>
-    <div>${observations.map(function (obs) {
-      return html`<div>${obs}<hr></div>`
-    })}</div>
+    <div>
+      ${observations}
+    </div>
   </div>`
 
   function importOdk (ev) {
