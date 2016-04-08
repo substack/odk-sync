@@ -26,7 +26,9 @@ function Sync (opts) {
     db: opts.kvdb || sub(self.db, KV),
     log: self.log
   })
-  self.forkdb = forkdb(sub(self.db, FDB))
+  self.forkdb = forkdb(sub(self.db, FDB), {
+    dir: opts.dir
+  })
 }
 
 Sync.prototype.replicate = function (opts, cb) {

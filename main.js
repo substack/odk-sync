@@ -6,6 +6,7 @@ var hyperlog = require('hyperlog')
 var strftime = require('strftime')
 var ipc = require('electron').ipcRenderer
 var onend = require('end-of-stream')
+var concat = require('concat-stream')
 
 var minimist = require('minimist')
 var argv = minimist(process.argv.slice(2), {
@@ -18,7 +19,8 @@ var Sync = require('./')
 var sync = Sync({
   db: level(path.join(argv.configdir, 'log')),
   log: hyperlog(level(path.join(argv.configdir, 'index')),
-    { valueEncoding: 'json' })
+    { valueEncoding: 'json' }),
+  dir: path.join(argv.configdir, 'blob')
 })
 
 sync.kv.createReadStream({ live: true })
@@ -69,7 +71,7 @@ dragDrop(window, function (files, pos) {
           var rel = path.relative(dir, file.fullPath)
           var key = id + '-' + rel
           keys.push(key)
-          addFile(file, id, info, function (err) {
+          addFile(file, key, info, function (err) {
             if (err) error(err)
             if (--pending === 0) done()
           })
@@ -90,7 +92,7 @@ dragDrop(window, function (files, pos) {
   })
   function addFile (file, key, info, cb) {
     var r = freader(file)
-    var w = sync.forkdb.createWriteStream({ key: key, info: info })
+    var w = sync.forkdb.createWriteStream({ key: key })
     r.once('error', cb)
     w.once('error', cb)
     r.pipe(w)
@@ -119,7 +121,8 @@ ipc.on('select-sync-dir', function (ev, dir) {
   var ex = Sync({
     db: level(path.join(dir, 'log')),
     log: hyperlog(level(path.join(dir, 'index')),
-      { valueEncoding: 'json' })
+      { valueEncoding: 'json' }),
+    dir: path.join(dir, 'blob')
   })
   var pending = 2
   var rex = ex.replicate(function (err) {
@@ -148,9 +151,27 @@ function render (state) {
       return html`<tr>
         <td>${obs.info.meta.formId} v${obs.info.meta.version}</td>
         <td>${strftime('%F %T', startTime)}</td>
+        <td><ul>${obs.files.map(function (key) {
+          return html`<li>
+            <a onclick=${showPic}>${key.split('-').slice(5).join('-')}</a>
+          </li>`
+          function showPic (ev) {
+            ev.preventDefault()
+            sync.forkdb.forks(key, function (err, hashes) {
+              if (err) return error(err)
+              var r = sync.forkdb.createReadStream(hashes[0].hash)
+              r.on('error', error)
+              r.pipe(concat(ondata))
+            })
+          }
+          function ondata (buf) {
+            location.href = 'data:image/png;base64,' + buf.toString('base64')
+          }
+        })}</ul></td>
       </tr>`
     })}
   </table>`
+
   return html`<div>
     <div class="errors">${state.errors.map(function (err) {
       return html`<div class="error">
