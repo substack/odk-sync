@@ -73,7 +73,7 @@ function render (state) {
       <th>form</th>
       <th>date</th>
     </tr>
-    ${state.observations.map(function (obs) {
+    ${(state.observations || []).map(function (obs) {
       var startTime = new Date(obs.info.start.split('.')[0])
       return html`<tr>
         <td>${obs.info.meta.formId} v${obs.info.meta.version}</td>
