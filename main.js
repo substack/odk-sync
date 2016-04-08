@@ -3,6 +3,7 @@ var homedir = require('os').homedir()
 var path = require('path')
 var level = require('level')
 var hyperlog = require('hyperlog')
+var ipc = require('electron').ipcRenderer
 
 var minimist = require('minimist')
 var argv = minimist(process.argv.slice(2), {
@@ -41,12 +42,10 @@ var state = {
 }
 update(state)
 
-var dragDrop = require('drag-and-drop-files')
-dragDrop(window, function (files) {
-  files.forEach(function (file) {
-    sync.importDevice(file.path, function (errors) {
-      if (errors.length) return setErrors(errors)
-    })
+ipc.on('select-dir', function (ev, dir) {
+  if (!dir) return
+  sync.importDevice(dir, function (errors) {
+    if (errors.length) return setErrors(errors)
   })
 })
 
@@ -73,9 +72,20 @@ function render (state) {
         update()
       }
     })}</div>
-    <h1>observations</h1>
+    <table class="title">
+      <tr>
+        <td><h1>observations</h1></td>
+        <td class="import">
+          <button onclick=${importOdk}>import</button>
+        </td>
+      </tr>
+    </table>
     <div>${observations}</div>
   </div>`
+
+  function importOdk (ev) {
+    ipc.send('open-dir')
+  }
 }
 
 function update () {
