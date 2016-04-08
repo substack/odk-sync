@@ -63,6 +63,23 @@ Sync.prototype.replicate = function (opts, cb) {
   }
 }
 
+Sync.prototype.importXmlData = function (data, cb) {
+  var self = this
+  tojson(data, function (err, info) {
+    if (err) return cb(err)
+    var id = info.meta.instanceId.replace(/^uuid:/, '')
+    self.kv.get(id, function (err, values) {
+      if (err) cb(err)
+      else if (Object.keys(values).length > 0) {
+        cb(null) // already has the record
+      } else {
+        // doesn't already have the record
+        cb(null, id, info)
+      }
+    })
+  })
+}
+
 Sync.prototype.importDevice = function (dir, cb) {
   var self = this
   var pending = 1
@@ -99,18 +116,8 @@ Sync.prototype._insertRecord = function (name, files, dir, cb) {
   }
   fs.readFile(xmlFiles[0], 'utf8', function (err, src) {
     if (err) return cb(err)
-    tojson(src, function (err, info) {
-      if (err) return cb(err)
-      var id = info.meta.instanceId.replace(/^uuid:/, '')
-      self.kv.get(id, function (err, values) {
-        if (err) cb(err)
-        else if (Object.keys(values).length > 0) {
-          cb(null) // already has the record
-        } else {
-          // doesn't already have the record
-          addFiles(id, info)
-        }
-      })
+    self.importXmlData(src, function (err, id, info) {
+      if (id) addFiles(id, info)
     })
   })
   function addFiles (id, info) {

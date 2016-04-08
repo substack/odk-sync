@@ -5,6 +5,7 @@ var level = require('level')
 var hyperlog = require('hyperlog')
 var strftime = require('strftime')
 var ipc = require('electron').ipcRenderer
+var onend = require('end-of-stream')
 
 var minimist = require('minimist')
 var argv = minimist(process.argv.slice(2), {
@@ -35,10 +36,73 @@ function addRow (row) {
   update()
 }
 
+var freader = require('filereader-stream')
+var dragDrop = require('drag-drop')
+dragDrop(window, function (files, pos) {
+  var xmlFiles = files.filter(function (file) {
+    var parts = file.fullPath.split(/[\\\/]/)
+    return /\.xml$/i.test(file.fullPath)
+      && parts[parts.length-3] === 'instances'
+  })
+  var notXmlFiles = files.filter(function (file) {
+    return !/\.xml$/i.test(file.fullPath)
+  })
+  if (xmlFiles.length === 0) {
+    return error('no instance files detected in dropped file')
+  }
+  state.loading = 'import'
+  update()
+
+  xmlFiles.forEach(function (file) {
+    var reader = new FileReader()
+    reader.addEventListener('load', function (ev) {
+      var keys = []
+      sync.importXmlData(ev.target.result, function (err, id, info) {
+        if (err) return error(err)
+        if (!id) return // already have this record
+        var dir = path.dirname(file.fullPath)
+        var xfiles = notXmlFiles.filter(function (file) {
+          return path.dirname(file.fullPath) === dir
+        })
+        var pending = 1 + xfiles.length
+        xfiles.forEach(function (file) {
+          var rel = path.relative(dir, file.fullPath)
+          var key = id + '-' + rel
+          keys.push(key)
+          addFile(file, id, info, function (err) {
+            if (err) error(err)
+            if (--pending === 0) done()
+          })
+        })
+        if (--pending === 0) done()
+
+        function done () {
+          console.log('ok')
+          sync.kv.put(id, { files: keys, info: info }, function (err, node) {
+            if (err) return error(err)
+            state.loading = null
+            update()
+          })
+        }
+      })
+    })
+    reader.readAsText(file)
+  })
+  function addFile (file, key, info, cb) {
+    var r = freader(file)
+    var w = sync.forkdb.createWriteStream({ key: key, info: info })
+    r.once('error', cb)
+    w.once('error', cb)
+    r.pipe(w)
+    w.once('finish', function () { cb(null) })
+  }
+})
+
 var html = require('yo-yo')
 var root = document.querySelector('#content')
 var state = {
   observations: null,
+  loading: null,
   errors: []
 }
 update(state)
@@ -46,7 +110,7 @@ update(state)
 ipc.on('select-import-dir', function (ev, dir) {
   if (!dir) return
   sync.importDevice(dir, function (errors) {
-    if (errors.length) return setErrors(errors)
+    if (errors.length) return error(errors)
   })
 })
 
@@ -59,12 +123,18 @@ ipc.on('select-sync-dir', function (ev, dir) {
   })
   var pending = 2
   var rex = ex.replicate(function (err) {
-    if (err) setErrors(err)
+    if (err) error(err)
+    if (--pending === 0) done()
   })
   var r = sync.replicate(function (err) {
-    if (err) setErrors(err)
+    if (err) error(err)
+    if (--pending === 0) done()
   })
   rex.pipe(r).pipe(rex)
+
+  function done () {
+    console.log('sync complete')
+  }
 })
 
 function render (state) {
@@ -84,7 +154,7 @@ function render (state) {
   return html`<div>
     <div class="errors">${state.errors.map(function (err) {
       return html`<div class="error">
-        ${err.message}
+        ${err.message || err}
         <button class="close" onclick=${closeError}>x</button>
       </div>`
       function closeError () {
@@ -98,7 +168,6 @@ function render (state) {
         <td><h1>observations</h1></td>
         <td class="import">
           <button onclick=${syncOdk}>sync</button>
-          <button onclick=${importOdk}>import</button>
         </td>
       </tr>
     </table>
@@ -107,9 +176,6 @@ function render (state) {
     </div>
   </div>`
 
-  function importOdk (ev) {
-    ipc.send('open-import-dir')
-  }
   function syncOdk (ev) {
     ipc.send('open-sync-dir')
   }
@@ -119,8 +185,8 @@ function update () {
   html.update(root, render(state))
 }
 
-function setErrors (errors) {
+function error (errors) {
   if (!Array.isArray(errors)) errors = [errors]
-  state.errors = errors
+  state.errors.push.apply(state.errors, errors)
   update()
 }
