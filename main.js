@@ -43,11 +43,28 @@ var state = {
 }
 update(state)
 
-ipc.on('select-dir', function (ev, dir) {
+ipc.on('select-import-dir', function (ev, dir) {
   if (!dir) return
   sync.importDevice(dir, function (errors) {
     if (errors.length) return setErrors(errors)
   })
+})
+
+ipc.on('select-sync-dir', function (ev, dir) {
+  if (!dir) return
+  var ex = Sync({
+    db: level(path.join(dir, 'log')),
+    log: hyperlog(level(path.join(dir, 'index')),
+      { valueEncoding: 'json' })
+  })
+  var pending = 2
+  var rex = ex.replicate(function (err) {
+    if (err) setErrors(err)
+  })
+  var r = sync.replicate(function (err) {
+    if (err) setErrors(err)
+  })
+  rex.pipe(r).pipe(rex)
 })
 
 function render (state) {
@@ -115,6 +132,7 @@ function render (state) {
       <tr>
         <td><h1>observations</h1></td>
         <td class="import">
+          <button onclick=${syncOdk}>sync</button>
           <button onclick=${importOdk}>import</button>
         </td>
       </tr>
@@ -125,7 +143,10 @@ function render (state) {
   </div>`
 
   function importOdk (ev) {
-    ipc.send('open-dir')
+    ipc.send('open-import-dir')
+  }
+  function syncOdk (ev) {
+    ipc.send('open-sync-dir')
   }
 }
 
