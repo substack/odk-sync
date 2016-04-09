@@ -22,6 +22,7 @@ var sync = Sync({
     { valueEncoding: 'json' }),
   dir: path.join(argv.configdir, 'blob')
 })
+window.sync = sync
 
 sync.list({ live: true })
   .on('data', addRow)
@@ -32,9 +33,7 @@ sync.list({ live: true })
 
 function addRow (row) {
   if (!state.observations) state.observations = []
-  Object.keys(row.values).forEach(function (key) {
-    state.observations.push(row.values[key])
-  })
+  state.observations.push(row)
   update()
 }
 

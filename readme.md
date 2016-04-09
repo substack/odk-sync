@@ -47,6 +47,11 @@ List odk records as a readable `stream` or collect the records as
 * `doc.files` - an array of string keys for attached files
 * `doc.info` - odk form data
 
+## var geostream = sync.geojson(opts, cb)
+
+List odk records as a `stream` of geojson data or collect a string of geojson as
+`cb(err, str)`.
+
 ## sync.read(key, cb)
 
 Read all the documents under `key` as `cb(err, streams)`.

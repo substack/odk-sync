@@ -12,6 +12,10 @@ var inherits = require('inherits')
 var EventEmitter = require('events').EventEmitter
 var freader = require('filereader-stream')
 var collect = require('collect-stream')
+var stringify = require('jsonstream').stringify
+var readonly = require('read-only-stream')
+var pump = require('pump')
+var xtend = require('xtend')
 
 var KV = 'kv', FDB = 'fdb'
 
@@ -253,8 +257,19 @@ Sync.prototype.list = function (opts, cb) {
     opts = {}
   }
   var stream = self.kv.createReadStream(opts)
+  var output = through.obj(write)
+  pump(stream, output)
   if (cb) collect(stream, cb)
-  return stream
+  return readonly(output)
+  function write (row, enc, next) {
+    var tr = this
+    Object.keys(row.values).forEach(function (key) {
+      var doc = row.values[key]
+      doc.key = key
+      tr.push(doc)
+    })
+    next()
+  }
 }
 
 Sync.prototype.read = function (key, cb) {
@@ -268,4 +283,49 @@ Sync.prototype.read = function (key, cb) {
   })
 }
 
+Sync.prototype.geojson = function (opts, cb) {
+  var self = this
+  if (typeof opts === 'function') {
+    cb = opts
+    opts = {}
+  }
+  var str = stringify('{"type":"FeatureCollection","features":[', ',\n', ']}')
+  pump(self.list(), through.obj(write), str)
+  if (cb) {
+    str.once('error', cb)
+    str.pipe(concat({ encoding: 'string' }, ondata))
+  }
+  return readonly(str)
+
+  function ondata (body) { cb(null, body) }
+  function write (doc, enc, next) {
+    var coord = findCoordinate(doc)
+    next(null, {
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: coord
+      },
+      properties: xtend(doc.info, {
+        files: doc.files
+      })
+    })
+  }
+}
+
 function noop () {}
+
+function findCoordinate (doc) {
+  if (Array.isArray(doc)) {
+    for (var i = 0; i < doc.length; i++) {
+      var res = findCoordinate(doc[i])
+      if (res) return res
+    }
+  } else if (doc && typeof doc === 'object') {
+    var keys = Object.keys(doc)
+    for (var i = 0; i < keys.length; i++) {
+      var res = findCoordinate(doc[keys[i]])
+      if (res) return res
+    }
+  } else return null
+}
