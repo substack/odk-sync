@@ -257,4 +257,15 @@ Sync.prototype.list = function (opts, cb) {
   return stream
 }
 
+Sync.prototype.read = function (key, cb) {
+  var self = this
+  self.forkdb.forks(key, function (err, hashes) {
+    if (err) return cb(err)
+    var streams = hashes.map(function (h) {
+      return self.forkdb.createReadStream(h.hash)
+    })
+    cb(null, streams)
+  })
+}
+
 function noop () {}

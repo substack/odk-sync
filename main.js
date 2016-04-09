@@ -110,11 +110,10 @@ function render (state) {
           </li>`
           function showPic (ev) {
             ev.preventDefault()
-            sync.forkdb.forks(key, function (err, hashes) {
+            sync.read(key, function (err, streams) {
               if (err) return error(err)
-              var r = sync.forkdb.createReadStream(hashes[0].hash)
-              r.on('error', error)
-              r.pipe(concat(ondata))
+              streams[0].on('error', error)
+              streams[0].pipe(concat(ondata))
             })
           }
           function ondata (buf) {
