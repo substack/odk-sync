@@ -10,6 +10,7 @@ var onend = require('end-of-stream')
 var through = require('through2')
 var inherits = require('inherits')
 var EventEmitter = require('events').EventEmitter
+var freader = require('filereader-stream')
 
 var KV = 'kv', FDB = 'fdb'
 
@@ -175,6 +176,73 @@ function getInstanceFiles (dir, cb) {
     })
     if (--pending === 0) cb(null, results)
   })
+}
+
+// files is an array of browser file instances from drag-drop:
+Sync.prototype.importFiles = function (files, cb) {
+  var self = this
+  cb = once(cb || noop)
+  var xmlFiles = files.filter(function (file) {
+    var parts = file.fullPath.split(/[\\\/]/)
+    return /\.xml$/i.test(file.fullPath)
+      && parts[parts.length-3] === 'instances'
+  })
+  var notXmlFiles = files.filter(function (file) {
+    return !/\.xml$/i.test(file.fullPath)
+  })
+  if (xmlFiles.length === 0) {
+    return cb(new Error('no instance files detected in dropped file'))
+  }
+
+  var docs = [], pendingDocs = xmlFiles.length + 1
+  xmlFiles.forEach(function (file) {
+    var reader = new FileReader()
+    reader.addEventListener('load', function (ev) {
+      var keys = []
+      self.importXmlData(ev.target.result, function (err, id, info) {
+        if (err) return cb(err)
+        if (!id) { // already have this record
+          if (--pendingDocs === 0) cb(null, docs)
+          return
+        }
+        var dir = path.dirname(file.fullPath)
+        var xfiles = notXmlFiles.filter(function (file) {
+          return path.dirname(file.fullPath) === dir
+        })
+        var pending = 1 + xfiles.length
+        xfiles.forEach(function (file) {
+          var rel = path.relative(dir, file.fullPath)
+          var key = id + '-' + rel
+          keys.push(key)
+          addFile(file, key, info, function (err) {
+            if (err) cb(err)
+            if (--pending === 0) done()
+          })
+        })
+        if (--pending === 0) done()
+
+        function done () {
+          var doc = { files: keys, info: info }
+          docs.push(doc)
+          self.kv.put(id, doc, function (err, node) {
+            if (err) cb(err)
+            else if (--pendingDocs === 0) cb(null, docs)
+          })
+        }
+      })
+    })
+    reader.readAsText(file)
+  })
+  if (--pendingDocs === 0) cb(null, docs)
+
+  function addFile (file, key, info, cb) {
+    var r = freader(file)
+    var w = self.forkdb.createWriteStream({ key: key })
+    r.once('error', cb)
+    w.once('error', cb)
+    r.pipe(w)
+    w.once('finish', function () { cb(null) })
+  }
 }
 
 function noop () {}

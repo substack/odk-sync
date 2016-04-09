@@ -41,63 +41,15 @@ function addRow (row) {
 var freader = require('filereader-stream')
 var dragDrop = require('drag-drop')
 dragDrop(window, function (files, pos) {
-  var xmlFiles = files.filter(function (file) {
-    var parts = file.fullPath.split(/[\\\/]/)
-    return /\.xml$/i.test(file.fullPath)
-      && parts[parts.length-3] === 'instances'
-  })
-  var notXmlFiles = files.filter(function (file) {
-    return !/\.xml$/i.test(file.fullPath)
-  })
-  if (xmlFiles.length === 0) {
-    return error('no instance files detected in dropped file')
-  }
   state.loading = 'import'
   update()
 
-  xmlFiles.forEach(function (file) {
-    var reader = new FileReader()
-    reader.addEventListener('load', function (ev) {
-      var keys = []
-      sync.importXmlData(ev.target.result, function (err, id, info) {
-        if (err) return error(err)
-        if (!id) return // already have this record
-        var dir = path.dirname(file.fullPath)
-        var xfiles = notXmlFiles.filter(function (file) {
-          return path.dirname(file.fullPath) === dir
-        })
-        var pending = 1 + xfiles.length
-        xfiles.forEach(function (file) {
-          var rel = path.relative(dir, file.fullPath)
-          var key = id + '-' + rel
-          keys.push(key)
-          addFile(file, key, info, function (err) {
-            if (err) error(err)
-            if (--pending === 0) done()
-          })
-        })
-        if (--pending === 0) done()
-
-        function done () {
-          console.log('ok')
-          sync.kv.put(id, { files: keys, info: info }, function (err, node) {
-            if (err) return error(err)
-            state.loading = null
-            update()
-          })
-        }
-      })
-    })
-    reader.readAsText(file)
+  sync.importFiles(files, function (err, docs) {
+    if (err) return error(err)
+    notify('imported ' + docs.length + ' reports')
+    state.loading = null
+    update()
   })
-  function addFile (file, key, info, cb) {
-    var r = freader(file)
-    var w = sync.forkdb.createWriteStream({ key: key })
-    r.once('error', cb)
-    w.once('error', cb)
-    r.pipe(w)
-    w.once('finish', function () { cb(null) })
-  }
 })
 
 var html = require('yo-yo')
@@ -105,7 +57,8 @@ var root = document.querySelector('#content')
 var state = {
   observations: null,
   loading: null,
-  errors: []
+  errors: [],
+  messages: []
 }
 update(state)
 
@@ -184,6 +137,17 @@ function render (state) {
         update()
       }
     })}</div>
+    <div class="messages">${state.messages.map(function (msg) {
+      return html`<div class="message">
+        ${msg}
+        <button class="close" onclick=${closeMsg}>x</button>
+      </div>`
+      function closeMsg () {
+        var ix = state.messages.indexOf(msg)
+        if (ix >= 0) state.messages.splice(ix, 1)
+        update()
+      }
+    })}</div>
     <table class="title">
       <tr>
         <td><h1>observations</h1></td>
@@ -209,5 +173,11 @@ function update () {
 function error (errors) {
   if (!Array.isArray(errors)) errors = [errors]
   state.errors.push.apply(state.errors, errors)
+  update()
+}
+
+function notify (msgs) {
+  if (!Array.isArray(msgs)) msgs = [msgs]
+  state.messages.push.apply(state.messages, msgs)
   update()
 }
