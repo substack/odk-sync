@@ -52,11 +52,11 @@ Sync.prototype.replicate = function (opts, cb) {
   onend(fdb, done)
   onend(log, done)
 
-  var rlog = this.log.replicate()
+  var rlog = this.log.replicate(opts)
   rlog.once('error', cb)
   rlog.pipe(log).pipe(rlog)
 
-  var rf = this.forkdb.replicate({ live: false })
+  var rf = this.forkdb.replicate(opts)
   rf.once('error', cb)
   rf.pipe(fdb).pipe(rf)
 
