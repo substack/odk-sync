@@ -17,7 +17,7 @@ var readonly = require('read-only-stream')
 var pump = require('pump')
 var xtend = require('xtend')
 
-var KV = 'kv', FDB = 'fdb'
+var KV = 'kv', FDB = 'fdb', METAKV = 'mkv'
 
 module.exports = Sync
 inherits(Sync, EventEmitter)
@@ -28,9 +28,14 @@ function Sync (opts) {
   EventEmitter.call(self)
   self.db = opts.db
   self.log = opts.log
+  self.metalog = opts.metalog
   self.kv = hyperkv({
-    db: opts.kvdb || sub(self.db, KV),
+    db: sub(self.db, KV),
     log: self.log
+  })
+  self.meta = hyperkv({
+    db: sub(self.db, METAKV),
+    log: self.metalog
   })
   self.forkdb = forkdb(sub(self.db, FDB), {
     dir: opts.dir
@@ -49,16 +54,23 @@ Sync.prototype.replicate = function (opts, cb) {
   var plex = multiplex()
   var fdb = plex.createSharedStream('forkdb')
   var log = plex.createSharedStream('log')
-  var pending = 2
+  var meta = plex.createSharedStream('meta')
+  var pending = 3
   plex.once('error', cb)
   fdb.once('error', cb)
   log.once('error', cb)
+  meta.once('error', cb)
   onend(fdb, done)
   onend(log, done)
+  onend(meta, done)
 
   var rlog = this.log.replicate(opts)
   rlog.once('error', cb)
   rlog.pipe(log).pipe(rlog)
+
+  var mlog = this.metalog.replicate(opts)
+  mlog.once('error', cb)
+  mlog.pipe(log).pipe(mlog)
 
   var rf = this.forkdb.replicate(opts)
   rf.once('error', cb)
