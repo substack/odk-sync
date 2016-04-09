@@ -23,7 +23,7 @@ var sync = Sync({
   dir: path.join(argv.configdir, 'blob')
 })
 
-sync.kv.createReadStream({ live: true })
+sync.list({ live: true })
   .on('data', addRow)
   .on('end', function () {
     if (!state.observations) state.observations = []

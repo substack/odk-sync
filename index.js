@@ -11,6 +11,7 @@ var through = require('through2')
 var inherits = require('inherits')
 var EventEmitter = require('events').EventEmitter
 var freader = require('filereader-stream')
+var collect = require('collect-stream')
 
 var KV = 'kv', FDB = 'fdb'
 
@@ -243,6 +244,17 @@ Sync.prototype.importFiles = function (files, cb) {
     r.pipe(w)
     w.once('finish', function () { cb(null) })
   }
+}
+
+Sync.prototype.list = function (opts, cb) {
+  var self = this
+  if (typeof opts === 'function') {
+    cb = opts
+    opts = {}
+  }
+  var stream = self.kv.createReadStream(opts)
+  if (cb) collect(stream, cb)
+  return stream
 }
 
 function noop () {}
