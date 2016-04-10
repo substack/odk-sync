@@ -312,7 +312,7 @@ Sync.prototype.geojson = function (opts, cb) {
 
   function ondata (body) { cb(null, body) }
   function write (doc, enc, next) {
-    var coord = findCoordinate(doc)
+    var coord = findCoordinate(doc.info)
     next(null, {
       type: 'Feature',
       geometry: {
@@ -335,6 +335,9 @@ function findCoordinate (doc) {
       if (res) return res
     }
   } else if (doc && typeof doc === 'object') {
+    if (doc.latitude !== undefined && doc.longitude !== undefined) {
+      return [ doc.longitude, doc.latitude ]
+    }
     var keys = Object.keys(doc)
     for (var i = 0; i < keys.length; i++) {
       var res = findCoordinate(doc[keys[i]])
