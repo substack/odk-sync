@@ -16,6 +16,7 @@ var stringify = require('jsonstream').stringify
 var readonly = require('read-only-stream')
 var pump = require('pump')
 var xtend = require('xtend')
+var concat = require('concat-stream')
 
 var KV = 'kv', FDB = 'fdb', METAKV = 'mkv'
 
