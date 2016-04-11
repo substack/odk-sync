@@ -1,4 +1,6 @@
 {
+  "name": "odk-sync",
+  "version": "1.0.0",
   "scripts": {
     "start": "electron app.js --disable-http-cache"
   },
@@ -15,6 +17,7 @@
     "read-only-stream": "^2.0.0",
     "strftime": "^0.9.2",
     "through2": "^2.0.1",
+    "xml2js": "~0.4.16",
     "yo-yo": "^1.1.1"
   }
 }

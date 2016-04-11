@@ -17,6 +17,7 @@ var readonly = require('read-only-stream')
 var pump = require('pump')
 var xtend = require('xtend')
 var concat = require('concat-stream')
+var xml2js = require('xml2js').parseString
 
 var KV = 'kv', FDB = 'fdb', METAKV = 'mkv'
 
@@ -203,7 +204,6 @@ Sync.prototype.importFiles = function (files, cb) {
   var xmlFiles = files.filter(function (file) {
     var parts = file.fullPath.split(/[\\\/]/)
     return /\.xml$/i.test(file.fullPath)
-      && parts[parts.length-3] === 'instances'
   })
   var notXmlFiles = files.filter(function (file) {
     return !/\.xml$/i.test(file.fullPath)
@@ -216,8 +216,20 @@ Sync.prototype.importFiles = function (files, cb) {
   xmlFiles.forEach(function (file) {
     var reader = new FileReader()
     reader.addEventListener('load', function (ev) {
+      xml2js(ev.target.result, function (err, res) {
+        if (err) cb(err)
+        else if (Object.keys(res)[0] === 'h:html') {
+          // skip xforms xml file
+          if (--pendingDocs === 0) cb(null, docs)
+        }
+        else loadData(ev.target.result)
+      })
+    })
+    reader.readAsText(file)
+
+    function loadData (str) {
       var keys = []
-      self.importXmlData(ev.target.result, function (err, id, info) {
+      self.importXmlData(str, function (err, id, info) {
         if (err) return cb(err)
         if (!id) { // already have this record
           if (--pendingDocs === 0) cb(null, docs)
@@ -248,8 +260,7 @@ Sync.prototype.importFiles = function (files, cb) {
           })
         }
       })
-    })
-    reader.readAsText(file)
+    }
   })
   if (--pendingDocs === 0) cb(null, docs)
 
