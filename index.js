@@ -71,7 +71,7 @@ Sync.prototype.replicate = function (opts, cb) {
 
   var mlog = this.metalog.replicate(opts)
   mlog.once('error', cb)
-  mlog.pipe(log).pipe(mlog)
+  mlog.pipe(meta).pipe(mlog)
 
   var rf = this.forkdb.replicate(opts)
   rf.once('error', cb)
