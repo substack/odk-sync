@@ -230,7 +230,7 @@ Sync.prototype.importFiles = function (files, cb) {
         var pending = 1 + xfiles.length
         xfiles.forEach(function (file) {
           var rel = path.relative(dir, file.fullPath)
-          var key = id + '-' + rel
+          var key = id + '/' + rel
           keys.push(key)
           addFile(file, key, info, function (err) {
             if (err) cb(err)
