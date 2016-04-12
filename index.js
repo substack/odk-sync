@@ -12,7 +12,6 @@ var inherits = require('inherits')
 var EventEmitter = require('events').EventEmitter
 var freader = require('filereader-stream')
 var collect = require('collect-stream')
-var stringify = require('jsonstream').stringify
 var readonly = require('read-only-stream')
 var pump = require('pump')
 var xtend = require('xtend')
@@ -283,8 +282,9 @@ Sync.prototype.list = function (opts, cb) {
   var stream = self.kv.createReadStream(opts)
   var output = through.obj(write)
   pump(stream, output)
-  if (cb) collect(stream, cb)
+  if (cb) collect(output, cb)
   return readonly(output)
+
   function write (row, enc, next) {
     var tr = this
     Object.keys(row.values).forEach(function (key) {
@@ -313,8 +313,11 @@ Sync.prototype.geojson = function (opts, cb) {
     cb = opts
     opts = {}
   }
-  var str = stringify('{"type":"FeatureCollection","features":[', ',\n', ']}')
-  pump(self.list(), through.obj(write), str)
+  var str = through.obj(write,end)
+  var count = 0
+  str.push('{"type":"FeatureCollection","features":[')
+  pump(self.list(), str)
+
   if (cb) {
     str.once('error', cb)
     str.pipe(concat({ encoding: 'string' }, ondata))
@@ -324,7 +327,8 @@ Sync.prototype.geojson = function (opts, cb) {
   function ondata (body) { cb(null, body) }
   function write (doc, enc, next) {
     var coord = findCoordinate(doc.info)
-    next(null, {
+    var pre = count++ === 0 ? '' : ',\n'
+    this.push(pre + JSON.stringify({
       type: 'Feature',
       geometry: {
         type: 'Point',
@@ -333,7 +337,12 @@ Sync.prototype.geojson = function (opts, cb) {
       properties: xtend(doc.info, {
         files: doc.files
       })
-    })
+    }))
+    next()
+  }
+  function end (next) {
+    this.push(']}\n')
+    next()
   }
 }
 
