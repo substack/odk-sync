@@ -221,13 +221,20 @@ Sync.prototype.importFiles = function (files, cb) {
         else if (fkey === 'h:html') {
           // skip xforms xml file
           if (--pendingDocs === 0) cb(null, docs)
-        } else if (!res[fkey] || !res[fkey].start || !res[fkey].end) {
+        } else if (!res[fkey] || !res[fkey].start || isEmpty(res[fkey].end)) {
           // invalid xml data, no start or no end (for in-progress reports)
           if (--pendingDocs === 0) cb(null, docs)
         } else loadData(ev.target.result)
       })
     })
     reader.readAsText(file)
+
+    function isEmpty (doc) {
+      if (!doc) return true
+      if (Array.isArray(doc) && doc.length === 0) return true
+      if (Array.isArray(doc) && doc.length === 1 && doc[0] === '') return true
+      return false
+    }
 
     function loadData (str) {
       var keys = []
