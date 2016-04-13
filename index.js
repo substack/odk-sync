@@ -223,6 +223,7 @@ Sync.prototype.importFiles = function (files, cb) {
           if (--pendingDocs === 0) cb(null, docs)
         } else if (!res[fkey] || !res[fkey].start || !res[fkey].end) {
           // invalid xml data, no start or no end (for in-progress reports)
+          if (--pendingDocs === 0) cb(null, docs)
         } else loadData(ev.target.result)
       })
     })
