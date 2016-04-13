@@ -216,12 +216,14 @@ Sync.prototype.importFiles = function (files, cb) {
     var reader = new FileReader()
     reader.addEventListener('load', function (ev) {
       xml2js(ev.target.result, function (err, res) {
+        var fkey = Object.keys(res)[0]
         if (err) cb(err)
-        else if (Object.keys(res)[0] === 'h:html') {
+        else if (fkey === 'h:html') {
           // skip xforms xml file
           if (--pendingDocs === 0) cb(null, docs)
-        }
-        else loadData(ev.target.result)
+        } else if (!res[fkey] || !res[fkey].start || !res[fkey].end) {
+          // invalid xml data, no start or no end (for in-progress reports)
+        } else loadData(ev.target.result)
       })
     })
     reader.readAsText(file)
