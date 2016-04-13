@@ -332,10 +332,10 @@ Sync.prototype.geojson = function (opts, cb) {
     var pre = count++ === 0 ? '' : ',\n'
     this.push(pre + JSON.stringify({
       type: 'Feature',
-      geometry: {
+      geometry: coord ? {
         type: 'Point',
         coordinates: coord
-      },
+      } : null,
       properties: xtend(doc.info, {
         files: doc.files
       })
